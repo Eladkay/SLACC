@@ -17,8 +17,8 @@ class SynthesizerTests(unittest.TestCase):
         TERMINALS ::= NUM
         """)
 
-        examples = [(None, 2)]
-        res = do_synthesis(rules_arithm, examples)  # synthesize 1 + 1
+        examples = [(0, 2)]
+        res = do_synthesis(rules_arithm, examples, debug=True)  # synthesize 1 + 1
         self.assertIsNotNone(res)
         print(res)
         for k, v in examples:
@@ -61,21 +61,20 @@ class SynthesizerTests(unittest.TestCase):
         for k, v in examples:
             self.assertEqual(eval(f"(lambda input: {res})({k})"), v)
 
-    @unittest.skip
     def test_listops_advanced(self):
         rules_listops_advanced = syntax.parse(r"""
         PROGRAM ::= L
         L ::= (L1 \s+\s L) | sorted(L3) | L2[N:N] | [N] | input
-        L1 ::= sorted(L3) | L2[N..N] | [N] | input
+        L1 ::= sorted(L3) | L2[N:N] | [N] | input
         L2 ::= (L1 \s+\s L) | sorted(L3) | input
-        L3 ::= (L1 \s+\s L) | L2[N..N] | input
+        L3 ::= (L1 \s+\s L) | L2[N:N] | input
         N ::= L.index(N) | 0
         """)
 
-        examples = [([1, 4, 7, 2, 0, 6, 9, 2, 5, 0, 3, 2, 4, 7], [1, 2, 4, 7, 0])]
+        examples = [([1, 4, 7, 2, 0, 6, 9, 2, 5, 0, 3, 2, 4, 7], [1, 2, 4, 7])]
         res = do_synthesis(rules_listops_advanced, examples, force_observational=True, timeout=300, debug=True)
-        # synthesize sorted(input[0..input.index(0)]) + [0]
-        # lecture 10 slide 29
+        # synthesize sorted(input[0..input.index(0)])
+        # lecture 10 slide 29, slightly simplified (no adding 0 at the end)
         self.assertIsNotNone(res)
         print(res)
         for k, v in examples:
@@ -138,7 +137,7 @@ class SynthesizerTests(unittest.TestCase):
     def test_listcomp(self):
         rules_listcomp = syntax.parse(r"""
         PROGRAM ::= LIST
-        LIST ::= [EXPR OP EXPR \sfor\sx\sin\s input \sif\s BEXP]  # can also do [EXPR ... but 10 times slower
+        LIST ::= [EXPR \sfor\sx\sin\s input \sif\s BEXP]  # can also do [EXPR ... but 10 times slower
         BEXP ::= EXPR RELOP EXPR
         RELOP ::= \s<=\s | \s>=\s | \s<\s | \s>\s | \s==\s | \s!=\s
         EXPR ::= CONST | EXPR OP EXPR
@@ -147,7 +146,7 @@ class SynthesizerTests(unittest.TestCase):
         """)
 
         examples = [([-1, 3, -2, 1], [4, 2])]
-        res = do_synthesis(rules_listcomp, examples, force_observational=True)
+        res = do_synthesis(rules_listcomp, examples, force_observational=True, debug=True, timeout=-1)
         # synthesize [x + 1 for x in input if x > 0]
         self.assertIsNotNone(res)
         print(res)
@@ -209,25 +208,26 @@ class SynthesizerTests(unittest.TestCase):
         for k, v in examples:
             self.assertEqual(eval(f"(lambda input: {res})({k})"), v)
 
-    @unittest.skip
     def test_recursive_advanced(self):
         rules_rec_advanced = syntax.parse(r"""
         PROGRAM ::= EXPR
         EXPR ::= (LAMBDA_REC_EXPR)(input) | CONST
+        CONST ::= 0 | 1
         VAR ::= 0 | 1 | x
         LAMBDA_REC_EXPR ::= z(lambda\s rec:\s lambda\s x:\s REC_EXPR)
-        REC_EXPR ::= VAR | REC_EXPR OP REC_EXPR | (REC_EXPR \sif\s x\s ==\s 0 \selse\s REC_EXPR)
-        REC_EXPR ::= (REC_EXPR \sif \sx \s== \s0 \selse \srec(x\s -\s 1) OP VAR)
+        REC_EXPR ::= VAR | VAR OP REC_EXPR
+        REC_EXPR ::= (VAR \sif\s x \s==\s 0 \selse\s rec(x\s -\s 1) OP VAR)
         OP ::= \s+\s | \s*\s
         """)
 
         examples = [(0, 1), (5, 120)]
-        res = do_synthesis(rules_rec_advanced, examples, force_observational=True)  # synthesize input!
+        res = do_synthesis(rules_rec_advanced, examples, force_observational=True, debug=True)  # synthesize input!
         self.assertIsNotNone(res)
         print(res)
         for k, v in examples:
             self.assertEqual(eval(f"(lambda input: {res})({k})"), v)
 
+    # @unittest.skip  # Works with top-down enumeration, does not work with bottom-up enumeration
     def test_recursive_with_lists(self):
         rules_rec_lists = syntax.parse(r"""
         PROGRAM ::= EXPR
@@ -235,18 +235,18 @@ class SynthesizerTests(unittest.TestCase):
         VAR ::= CONST | x | car(x)
         CONST ::= 0 | 1 | input
         LAMBDA_REC_EXPR ::= z(lambda\s rec:\s lambda\s x:\s REC_EXPR)
-        REC_EXPR ::= (VAR \sif\s not\s x \selse\s rec(cdr(x)) OP VAR) | REC_EXPR OP REC_EXPR
+        REC_EXPR ::= (VAR \sif\s not\s x \selse\s rec(cdr(x)) OP VAR)
         OP ::= \s+\s | \s*\s
-        """)
+        """)  #  | REC_EXPR OP REC_EXPR
 
         examples = [([1, 2, 3, 4, 5], 5)]
-        res = do_synthesis(rules_rec_lists, examples, force_observational=True)  # synthesize len(input)
+        res = do_synthesis(rules_rec_lists, examples, force_observational=True, debug=True)  # synthesize len(input)
         self.assertIsNotNone(res)
         print(res)
         for k, v in examples:
             self.assertEqual(eval(f"(lambda input: {res})({k})"), v)
 
-    @unittest.skip
+    # Passes with bottom-up enumeration but not with top-down enumeration
     def test_bitwise_ops(self):
         rules_rec_lists = syntax.parse(r"""
         PROGRAM ::= VAR
@@ -264,21 +264,17 @@ class SynthesizerTests(unittest.TestCase):
         for k, v in examples:
             self.assertEqual(eval(f"(lambda input: {res})({k})"), v)
 
-    @unittest.skip
     def test_gcd(self):
         rules_gcd = syntax.parse(r"""
         PROGRAM ::= EXPR
-        EXPR ::= (LAMBDA_REC_EXPR)(input) | CONST
-        VAR ::= CONST | x[0] | x[1]
-        CONST ::= 0 | 1
-        LAMBDA_REC_EXPR ::= z(lambda\s rec:\s lambda\s x:\s x[0]\s if\s x[0] \s==\s x[1]\s else\s REC_EXPR)
-        REC_EXPR ::= (rec((VAR \s-\s x[1], x[1]))\s if\s VAR RELOP x[1]\s else\s rec((x[0], VAR \s-\s x[0])))
-        OP ::= \s+\s | \s-\s
+        EXPR ::= (LAMBDA_REC_EXPR)(input)
+        VAR ::= x[0] | x[1]
+        LAMBDA_REC_EXPR ::= z(lambda\s rec:\s lambda\s x:\s VAR \sif\s x[0] \s==\s x[1]\s else\s REC_EXPR)
+        REC_EXPR ::= (rec((VAR, VAR_EXPR))\s if\s VAR RELOP VAR \selse\s rec((VAR_EXPR, VAR)))
+        VAR_EXPR ::= x[0] \s-\s x[1] | x[1] \s-\s x[0]
         RELOP ::= \s<\s | \s>\s | \s==\s
         """)
 
-        # todo this test acts weird in certain cases (replace vars with VAR or relops with RELOP)
-        # I wish this test worked better
         examples = [((5, 3), 1), ((4, 2), 2)]
         res = do_synthesis(rules_gcd, examples, force_observational=True, debug=True, timeout=120)
         # synthesize gcd(input)
@@ -324,7 +320,7 @@ class SynthesizerTests(unittest.TestCase):
         """)
 
         examples = [((0, 1), 1), ((1, 0), 1), ((1, 2), 2), ((3, 0), 3)]
-        res = do_synthesis(rules_max, examples, force_observational=True)
+        res = do_synthesis(rules_max, examples, force_observational=True, debug=True, timeout=-1)
         # synthesize input[0] if input[0] > input[1] else input[1]
         # lecture 10 slide 8-9
         self.assertIsNotNone(res)
@@ -332,7 +328,7 @@ class SynthesizerTests(unittest.TestCase):
         for k, v in examples:
             self.assertEqual(eval(f"(lambda input: {res})({k})"), v)
 
-    @unittest.skip  # python does not work like this
+    @unittest.skip  # python does not work like this. might work if I implement imperative synthesis
     def test_def(self):
         rules_def = syntax.parse(r"""
         PROGRAM ::= (lambda:\s DEF \n EXPR)()

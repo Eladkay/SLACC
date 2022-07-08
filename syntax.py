@@ -25,8 +25,8 @@ class Rule:
         return ret
 
 
-TOKEN_REGEX = re.compile(r"^[_A-Z]+$|^[^A-Z]+$")
-NONTERMINAL_REGEX = re.compile(r"^[_A-Z]+$")
+TOKEN_REGEX = re.compile(r"^[_A-Z\d]+$|^[^A-Z]+$")
+NONTERMINAL_REGEX = re.compile(r"^[_A-Z\d]*[A-Z]+[_A-Z\d]*$")
 separation_tokens = ["(", ")", ",", "[", "]", "=", "->", ".", "*", "+", "-", "/", "%", ":"]
 escapes = {"\\s": " ", "\\a": "->", "\\p": "|", "\\t": "\t", "\\n": "\n", "True": "(1==1)", "False": "(1==0)"}
 
@@ -65,11 +65,14 @@ def parse(string) -> (list, list):  # (rules, nonterminals)
         raise ValueError("PROGRAM has more than one . This is an error.")
     if any(["PROGRAM" in rule.rhs for rule in ret]):
         raise ValueError("PROGRAM is defined in right-hand side of rule. This is an error.")
-    nonterminals = []
+    nonterminals = set()
     for rule in ret:
         for token in rule.rhs:
             if NONTERMINAL_REGEX.match(token):
-                nonterminals.append(token)
+                nonterminals.add(token)
         if NONTERMINAL_REGEX.match(rule.lhs):
-            nonterminals.append(rule.lhs)
+            nonterminals.add(rule.lhs)
+    for nonterminal in nonterminals:
+        if nonterminal not in [rule.lhs for rule in ret]:
+            raise ValueError(f"There is no rule for {nonterminal}. This is an error.")
     return ret, nonterminals
