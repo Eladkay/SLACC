@@ -37,13 +37,15 @@ def replace_escapes(string):
     return string
 
 
-def parse(string) -> (list, list):  # (rules, nonterminals)
+def parse(string: str) -> (list, list):  # (rules, nonterminals)
     rules = string.split("\n")
     ret = []
     for rule in rules:
         if rule.isspace() or not rule:
             continue
 
+        if rule.strip().startswith("#"):
+            continue
         lhs, rhs = rule.split("#")[0].split("::=")
 
         for key in separation_tokens:

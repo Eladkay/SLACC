@@ -3,7 +3,7 @@
 
 # Features:
 # Lambda synthesis
-# Automatic proving of equivalence
+# Automatic proving of equivalence in some cases
 # Relatively fast! (checked with profiler)
 # Synthesize recursion with Z combinator! (when halting is proven in grammar for all options)
 # Expressive and flexible
@@ -14,20 +14,22 @@
 # Short-circuiting for more efficient bottom-up enumeration
 # Bottom-up enumeration!
 
-# TODO:
-# Make remaining tests pass
-# Make it faster!
+# TODO short term:
+# Make it faster! Better observational equivalence: For some reason it slows down significantly... represent programs as trees
 # Richer STDLIB
+# Multi-threaded synthesis (use subprocess or multiprocessing in Python)
+# Annotations for rules like symmetry and idempotence (auto-generation of symmetry and idempotence breaking rules)
+# Understand why is there so much variance in running times.
+# Determinize order
+# Join together observational equivalence checker and specification check
+
+# TODO idealistically:
 # Detect non-termination of recursion in lambda expressions
 # Synthesis whilelang code? Other languages?
-# Annotations for rules like symmetry and idempotence (auto-generation of symmetry and idempotence breaking rules)
-# Why is there so much variance in running times?
-# Do terminal detection, etc in parser
-# Stricter checks on grammar: tokens must match ^[_A-Z]+|[^A-Z]+$
 # Imperative synthesis! Details discussed with Orel
-# Faster observational equivalence - see marking in function
 # Adding regex support to syntax
-# Multi-threaded synthesis
+# Tail-recursion optimization (extend the short-circuit)
+
 import profile
 from typing import List
 from z3 import Solver, Int, ForAll, sat, Z3Exception
@@ -50,6 +52,16 @@ class ConstantResult(Enum):
     UNDECIDABLE_CONSTANT = 6
 
 
+class NoResult:  # thank you Bidusa
+    def __eq__(self, other):
+        return False
+
+
+class ResultException(Exception):
+    def __init__(self, res):
+        self.res = res
+
+
 def eval_cached(prog, input=None):
     try:
         if prog in cache:
@@ -58,7 +70,7 @@ def eval_cached(prog, input=None):
         cache[prog] = func
         return func(input)
     except:
-        return lambda: None  # x s.t. x != x
+        return NoResult()  # x s.t. x != x
 
 
 def do_synthesis(parsed, examples, timeout=60, force_observational=False, debug=False):
@@ -101,7 +113,7 @@ def check_if_function(prog_to_test, debug):
 
 
 def check_if_seen_constant(prog_to_test, seen_progs, nonterminals, debug):
-    if "input" not in prog_to_test:
+    if "input" not in prog_to_test:  # heuristic. constants in general are undecidable
         if debug:
             print(f"DEBUG: {prog_to_test} does not contain input. Checking if it is a constant...")
         try:
@@ -114,7 +126,7 @@ def check_if_seen_constant(prog_to_test, seen_progs, nonterminals, debug):
                 print(f"DEBUG: {prog_to_test} is a constant. Checking if any other are the same constant...")
             for prog in seen_progs:
                 try:
-                    if eval_cached(prog) == const:
+                    if eval_cached(prog) == const:  # todo: separate constant cache
                         if debug:
                             print(f"DEBUG: {prog_to_test} is equivalent to {prog} because they are the same constant")
                         return ConstantResult.SEEN_CONSTANT
@@ -151,8 +163,9 @@ def check_if_seen_constant(prog_to_test, seen_progs, nonterminals, debug):
             return ConstantResult.UNDECIDABLE_NOT_A_CONSTANT  # not much we can do
     return ConstantResult.UNDECIDABLE_NOT_A_CONSTANT
 
-
+# todo decide heuristically when to use
 def equiv_to_any(seen_progs, prog_to_test, prove, nonterminals, examples=None, debug=False):
+    return False  # todo
     if check_if_function(prog_to_test, debug):
         return False  # function equivalence is undecidable
 
@@ -186,15 +199,22 @@ def equiv_to_any(seen_progs, prog_to_test, prove, nonterminals, examples=None, d
                 return True
     else:
         flag = False
-        x_outs = [(k, eval_cached(prog_to_test, k)) for k, _ in examples]
+        try:
+            x_outs = [(k, eval_cached(prog_to_test, k)) for k, _ in examples]
+        except NameError:
+            return False
         for prog in seen_progs:
             if any(it in prog for it in nonterminals):
                 continue
             for k, _ in examples:
-                prog_out = eval_cached(prog, k)
+                try:
+                    prog_out = eval_cached(prog, k)
+                except NameError:
+                    continue
                 x_out = [it for it in x_outs if it[0] == k][0][1]
                 if prog_out != x_out:
                     flag = True
+                    break
             if not flag:
                 if debug:
                     print(f"DEBUG: {prog_to_test} exhibits observational equivalence with {prog}")
@@ -309,6 +329,7 @@ def expand(rules: List[Rule], initial, nonterminals, prove=True, examples=None, 
         for new in short_circuited[initial]:
             yield ''.join(new)
         instances = {it: new_values[it].union(instances[it]).union(short_circuited[it]) for it in nonterminals}
+        instances_joined = {it: new_values_joined[it].union(instances_joined[it]).union(short_circuited[it]) for it in nonterminals}  # todo?
         current_height += 1
 
 

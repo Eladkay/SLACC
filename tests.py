@@ -137,11 +137,11 @@ class SynthesizerTests(unittest.TestCase):
     def test_listcomp(self):
         rules_listcomp = syntax.parse(r"""
         PROGRAM ::= LIST
-        LIST ::= [EXPR \sfor\sx\sin\s input \sif\s BEXP]  # can also do [EXPR ... but 10 times slower
+        LIST ::= [EXPR \sfor\sx\sin\s input \sif\s BEXP]
         BEXP ::= EXPR RELOP EXPR
         RELOP ::= \s<=\s | \s>=\s | \s<\s | \s>\s | \s==\s | \s!=\s
         EXPR ::= CONST | EXPR OP EXPR
-        OP ::= \s+\s | \s-\s | \s/\s | \s*\s
+        OP ::= \s+\s | \s-\s | \s*\s
         CONST ::= 0 | 1 | x
         """)
 
@@ -155,6 +155,7 @@ class SynthesizerTests(unittest.TestCase):
 
     def test_literal_reverse_engineering(self):
         rules_literal_reverse_engineering = syntax.parse(r"""
+        # This test is in honour of Itamar who is the TA of Reverse Eng
         PROGRAM ::= EXPR
         EXPR ::= input | list(reversed(NO_REVERSED_EXPR)) | sorted(NO_SORTED_EXPR)
         NO_REVERSED_EXPR ::= input | sorted(NO_SORTED_EXPR)
@@ -249,7 +250,7 @@ class SynthesizerTests(unittest.TestCase):
     # Passes with bottom-up enumeration but not with top-down enumeration
     def test_bitwise_ops(self):
         rules_rec_lists = syntax.parse(r"""
-        PROGRAM ::= VAR
+        PROGRAM ::= VAR 
         VAR ::= CONST | input | ( VAR OPS VAR ) | ~ VAR_NO_NEG
         VAR_NO_NEG ::= input | ( VAR OPS VAR )
         CONST ::= 0 | 1
@@ -297,7 +298,7 @@ class SynthesizerTests(unittest.TestCase):
         """)
 
         examples = [([-1, 3, -2, 1], True), ([5, 3, 4, 1], False)]
-        res = do_synthesis(rules_all_any, examples, force_observational=True)
+        res = do_synthesis(rules_all_any, examples, force_observational=True, debug=True)
         # synthesize any(x < 0 for x in input)
         self.assertIsNotNone(res)
         print(res)
@@ -332,7 +333,7 @@ class SynthesizerTests(unittest.TestCase):
     def test_def(self):
         rules_def = syntax.parse(r"""
         PROGRAM ::= (lambda:\s DEF \n EXPR)()
-        DEF ::= def f(x):\n\s\s\s\s return\z EXPR_WITH_VAR
+        DEF ::= def f(x):\n\s\s\s\s return\s EXPR_WITH_VAR
         EXPR_WITH_VAR ::= x | EXPR | EXPR_WITH_VAR OP EXPR_WITH_VAR
         EXPR ::= f(EXPR) | input | CONST | EXPR OP EXPR
         CONST ::= 0 | 1
@@ -347,11 +348,54 @@ class SynthesizerTests(unittest.TestCase):
         for k, v in examples:
             self.assertEqual(eval(f"(lambda input: {res})({k})"), v)
 
+    def test_observational_equivalence(self):
+        rules_observational_equivalence = syntax.parse(r"""
+        PROGRAM ::= EXPR
+        EXPR ::= input | EXPR * EXPR | CONST | EXPR + EXPR | (- EXPR)
+        CONST ::= 0 | 1
+        # EXPR ::= input | EXPR * EXPR | (- EXPR)
+        """)
+
+        examples = [(0, 1), (1, 2), (-2, 5), (3, 10)]
+        # examples = [(0, 0), (1, 1), (-2, 4), (3, 9)]
+        res = do_synthesis(rules_observational_equivalence, examples, force_observational=True, debug=True, timeout=-1)
+        # synthesize x^2 + 1
+        self.assertIsNotNone(res)
+        print(res)
+        for k, v in examples:
+            self.assertEqual(eval(f"(lambda input: {res})({k})"), v)
+
+    def test_strings(self):
+        rules_strings = syntax.parse(r"""
+        PROGRAM ::= EXPR
+        EXPR ::= input | STRLIST[N] | EXPR.strip()
+        N ::= 0 | 1 | 2
+        STRLIST ::= EXPR.split(CHAR) | [EXPR,\s *STRLIST]
+        CHAR ::= '.' | '@' | '/' | '#'
+        """)
+
+        examples = [("elad@eladkay.com", "eladkay")]
+        res = do_synthesis(rules_strings, examples, force_observational=True, debug=True)
+        # synthesize input.split('@')[1].split('.')[0]
+        self.assertIsNotNone(res)
+        print(res)
+        for k, v in examples:
+            self.assertEqual((lambda input: eval(res))(k), v)
+
+        examples = [("213.57.62.171", "57")]
+        res = do_synthesis(rules_strings, examples, force_observational=True)
+        # synthesize input.split('.')[1]
+        self.assertIsNotNone(res)
+        print(res)
+        for k, v in examples:
+            self.assertEqual((lambda input: eval(res))(k), v)
+
     # ideas for tests:
     # reverse a linked list
     # self-synthesis! use do_synthesis in the grammar
     # regular expressions
     # ([16, 77, 31], 46), ([60, 9, 61, 63, 1], 2) -> sorted(input)[-1] - sorted(input)[-2] (old lecture 13, slide 48)
+    # Synthesize part of an email address from the address
 
 
 if __name__ == '__main__':
