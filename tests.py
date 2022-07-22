@@ -1,3 +1,4 @@
+import re
 import unittest
 
 import syntax
@@ -18,7 +19,7 @@ class SynthesizerTests(unittest.TestCase):
         """)
 
         examples = [(0, 2)]
-        res = do_synthesis(rules_arithm, examples, debug=True)  # synthesize 1 + 1
+        res = do_synthesis(rules_arithm, examples)  # synthesize 1 + 1
         self.assertIsNotNone(res)
         print(res)
         for k, v in examples:
@@ -72,7 +73,7 @@ class SynthesizerTests(unittest.TestCase):
         """)
 
         examples = [([1, 4, 7, 2, 0, 6, 9, 2, 5, 0, 3, 2, 4, 7], [1, 2, 4, 7])]
-        res = do_synthesis(rules_listops_advanced, examples, force_observational=True, timeout=300, debug=True)
+        res = do_synthesis(rules_listops_advanced, examples, timeout=300)
         # synthesize sorted(input[0..input.index(0)])
         # lecture 10 slide 29, slightly simplified (no adding 0 at the end)
         self.assertIsNotNone(res)
@@ -93,7 +94,7 @@ class SynthesizerTests(unittest.TestCase):
         """)
 
         examples = [([-1, 3, -2, 1], [3, 1])]
-        res = do_synthesis(rules_listops_lambda_basic, examples, force_observational=True)
+        res = do_synthesis(rules_listops_lambda_basic, examples)
         # synthesize filter(lambda x: x > 0), input)
         self.assertIsNotNone(res)
         print(res)
@@ -119,7 +120,7 @@ class SynthesizerTests(unittest.TestCase):
         """)
 
         examples = [([-1, 3, -2, 1], [0, 4, -1, 2])]
-        res = do_synthesis(rules_listops_lambda_advanced, examples, force_observational=True)
+        res = do_synthesis(rules_listops_lambda_advanced, examples)
         # synthesize list(map(lambda x: x + 1, input))
         self.assertIsNotNone(res)
         print(res)
@@ -127,7 +128,7 @@ class SynthesizerTests(unittest.TestCase):
             self.assertEqual(eval(f"(lambda input: {res})({k})"), v)
 
         examples = [([-1, 3, -2, 1], [0, 0, 0, 0])]
-        res = do_synthesis(rules_listops_lambda_advanced, examples, force_observational=True)
+        res = do_synthesis(rules_listops_lambda_advanced, examples)
         # synthesize list(map(lambda x: 0, input))
         self.assertIsNotNone(res)
         print(res)
@@ -146,7 +147,7 @@ class SynthesizerTests(unittest.TestCase):
         """)
 
         examples = [([-1, 3, -2, 1], [4, 2])]
-        res = do_synthesis(rules_listcomp, examples, force_observational=True, debug=True, timeout=-1)
+        res = do_synthesis(rules_listcomp, examples, timeout=-1)
         # synthesize [x + 1 for x in input if x > 0]
         self.assertIsNotNone(res)
         print(res)
@@ -163,7 +164,7 @@ class SynthesizerTests(unittest.TestCase):
         """)
 
         examples = [([1, 2, 3], [3, 2, 1]), ([1, 3, 2], [3, 2, 1])]
-        res = do_synthesis(rules_literal_reverse_engineering, examples, force_observational=True)
+        res = do_synthesis(rules_literal_reverse_engineering, examples)
         # synthesize reversed(sorted(input))
         # lecture 10 slide 5
         self.assertIsNotNone(res)
@@ -179,7 +180,7 @@ class SynthesizerTests(unittest.TestCase):
         """)
 
         examples = [([], 1)]
-        res = do_synthesis(rules_if, examples, force_observational=True)
+        res = do_synthesis(rules_if, examples)
         self.assertIsNotNone(res)
         print(res)
         for k, v in examples:
@@ -196,14 +197,14 @@ class SynthesizerTests(unittest.TestCase):
         """)
 
         examples = [(1, 1), (2, 2)]
-        res = do_synthesis(rules_rec_basic, examples, force_observational=True)  # synthesize 'input' recursively
+        res = do_synthesis(rules_rec_basic, examples)  # synthesize 'input' recursively
         self.assertIsNotNone(res)
         print(res)
         for k, v in examples:
             self.assertEqual(eval(f"(lambda input: {res})({k})"), v)
 
         examples = [(0, 1), (5, 120)]
-        res = do_synthesis(rules_rec_basic, examples, force_observational=True)  # synthesize input!
+        res = do_synthesis(rules_rec_basic, examples)  # synthesize input!
         self.assertIsNotNone(res)
         print(res)
         for k, v in examples:
@@ -222,13 +223,12 @@ class SynthesizerTests(unittest.TestCase):
         """)
 
         examples = [(0, 1), (5, 120)]
-        res = do_synthesis(rules_rec_advanced, examples, force_observational=True, debug=True)  # synthesize input!
+        res = do_synthesis(rules_rec_advanced, examples)  # synthesize input!
         self.assertIsNotNone(res)
         print(res)
         for k, v in examples:
             self.assertEqual(eval(f"(lambda input: {res})({k})"), v)
 
-    # @unittest.skip  # Works with top-down enumeration, does not work with bottom-up enumeration
     def test_recursive_with_lists(self):
         rules_rec_lists = syntax.parse(r"""
         PROGRAM ::= EXPR
@@ -236,12 +236,12 @@ class SynthesizerTests(unittest.TestCase):
         VAR ::= CONST | x | car(x)
         CONST ::= 0 | 1 | input
         LAMBDA_REC_EXPR ::= z(lambda\s rec:\s lambda\s x:\s REC_EXPR)
-        REC_EXPR ::= (VAR \sif\s not\s x \selse\s rec(cdr(x)) OP VAR)
+        REC_EXPR ::= (VAR \sif\s not\s x \selse\s rec(cdr(x)) OP VAR) | VAR OP REC_EXPR
         OP ::= \s+\s | \s*\s
-        """)  #  | REC_EXPR OP REC_EXPR
+        """)
 
         examples = [([1, 2, 3, 4, 5], 5)]
-        res = do_synthesis(rules_rec_lists, examples, force_observational=True, debug=True)  # synthesize len(input)
+        res = do_synthesis(rules_rec_lists, examples)  # synthesize len(input)
         self.assertIsNotNone(res)
         print(res)
         for k, v in examples:
@@ -258,7 +258,7 @@ class SynthesizerTests(unittest.TestCase):
         """)
 
         examples = [(83, 4)]
-        res = do_synthesis(rules_rec_lists, examples, force_observational=True, debug=True)  # synthesize ~x & (x+1)
+        res = do_synthesis(rules_rec_lists, examples)  # synthesize ~x & (x+1)
         # lecture 11 slide 22
         self.assertIsNotNone(res)
         print(res)
@@ -277,7 +277,7 @@ class SynthesizerTests(unittest.TestCase):
         """)
 
         examples = [((5, 3), 1), ((4, 2), 2)]
-        res = do_synthesis(rules_gcd, examples, force_observational=True, debug=True, timeout=120)
+        res = do_synthesis(rules_gcd, examples, timeout=120)
         # synthesize gcd(input)
         self.assertIsNotNone(res)
         print(res)
@@ -298,7 +298,7 @@ class SynthesizerTests(unittest.TestCase):
         """)
 
         examples = [([-1, 3, -2, 1], True), ([5, 3, 4, 1], False)]
-        res = do_synthesis(rules_all_any, examples, force_observational=True, debug=True)
+        res = do_synthesis(rules_all_any, examples)
         # synthesize any(x < 0 for x in input)
         self.assertIsNotNone(res)
         print(res)
@@ -306,7 +306,7 @@ class SynthesizerTests(unittest.TestCase):
             self.assertEqual(eval(f"(lambda input: {res})({k})"), v)
 
         examples = [([0, 0, 0, 0], True), ([0, 1, 0, 0], False), ([0, -1, 0, 0], False)]
-        res = do_synthesis(rules_all_any, examples, force_observational=True)
+        res = do_synthesis(rules_all_any, examples)
         # synthesize all(x == 0 for x in input)
         self.assertIsNotNone(res)
         print(res)
@@ -321,7 +321,7 @@ class SynthesizerTests(unittest.TestCase):
         """)
 
         examples = [((0, 1), 1), ((1, 0), 1), ((1, 2), 2), ((3, 0), 3)]
-        res = do_synthesis(rules_max, examples, force_observational=True, debug=True, timeout=-1)
+        res = do_synthesis(rules_max, examples, timeout=-1)
         # synthesize input[0] if input[0] > input[1] else input[1]
         # lecture 10 slide 8-9
         self.assertIsNotNone(res)
@@ -341,7 +341,7 @@ class SynthesizerTests(unittest.TestCase):
         """)
 
         examples = [(0, 0), (1, 1), (2, 4), (3, 9)]
-        res = do_synthesis(rules_def, examples, force_observational=True, debug=True)
+        res = do_synthesis(rules_def, examples)
         # synthesize def f(x): return x * x in f(input)
         self.assertIsNotNone(res)
         print(res)
@@ -352,13 +352,13 @@ class SynthesizerTests(unittest.TestCase):
         rules_observational_equivalence = syntax.parse(r"""
         PROGRAM ::= EXPR
         EXPR ::= input | EXPR * EXPR | CONST | EXPR + EXPR | (- EXPR)
-        CONST ::= 0 | 1
+        CONST ::= 0 | 1 | 2 | 3 | 4
         # EXPR ::= input | EXPR * EXPR | (- EXPR)
         """)
 
         examples = [(0, 1), (1, 2), (-2, 5), (3, 10)]
         # examples = [(0, 0), (1, 1), (-2, 4), (3, 9)]
-        res = do_synthesis(rules_observational_equivalence, examples, force_observational=True, debug=True, timeout=-1)
+        res = do_synthesis(rules_observational_equivalence, examples, timeout=-1)
         # synthesize x^2 + 1
         self.assertIsNotNone(res)
         print(res)
@@ -375,7 +375,7 @@ class SynthesizerTests(unittest.TestCase):
         """)
 
         examples = [("elad@eladkay.com", "eladkay")]
-        res = do_synthesis(rules_strings, examples, force_observational=True, debug=True)
+        res = do_synthesis(rules_strings, examples)
         # synthesize input.split('@')[1].split('.')[0]
         self.assertIsNotNone(res)
         print(res)
@@ -383,19 +383,54 @@ class SynthesizerTests(unittest.TestCase):
             self.assertEqual((lambda input: eval(res))(k), v)
 
         examples = [("213.57.62.171", "57")]
-        res = do_synthesis(rules_strings, examples, force_observational=True)
+        res = do_synthesis(rules_strings, examples)
         # synthesize input.split('.')[1]
         self.assertIsNotNone(res)
         print(res)
         for k, v in examples:
             self.assertEqual((lambda input: eval(res))(k), v)
 
+    def test_lists_super(self):
+        test_lists_super = syntax.parse(r"""
+        PROGRAM ::= EXPR
+        EXPR ::= LIST[N] | (EXPR OP EXPR)
+        N ::= 0 | 1 | 2 | -1 | -2
+        OP ::= \s-\s | \s+\s 
+        LIST ::= input | sorted(input) | reversed(input) | reversed(sorted(input))
+        """)
+
+        examples = [([16, 77, 31], 46), ([60, 9, 61, 63, 1], 2), ([5, 4, 3, 2, 1], 1)]
+        res = do_synthesis(test_lists_super, examples, timeout=-1)
+        # synthesize sorted(input)[-1] - sorted(input)[-2]
+        # lecture 13 slide 48, with an additional example because it was underfitted: both examples had the maximum
+        # element in the penultimate position in the list
+        self.assertIsNotNone(res)
+        print(res)
+        for k, v in examples:
+            self.assertEqual(eval(f"(lambda input: {res})({k})"), v)
+
+    @unittest.skip  # takes too much memory right now
+    def test_regex(self):
+        test_lists_regex = syntax.parse(r"""
+        PROGRAM ::= re.match(r" EXPR ",\s input).group(1)
+        EXPR ::= CONST | EXPR_CONCAT EXPR | (EXPR_PAREN) | EXPR_PLUS+  # todo equivalence breaking here?
+        EXPR_PAREN ::= EXPR_CONCAT EXPR | EXPR_PLUS+ | .
+        EXPR_CONCAT ::= CONST | (EXPR_PAREN) | EXPR_PLUS+
+        EXPR_PLUS ::= CONST | (EXPR_PAREN)
+        CONST ::= a | b | .
+        """)
+        examples = [("aaabcccad", "c"), ("abababa", "a")]
+        res = do_synthesis(test_lists_regex, examples, timeout=-1)
+        # synthesize re.match(r".+b(.)", input).group(1)
+        self.assertIsNotNone(res)
+        print(res)
+        for k, v in examples:
+            self.assertEqual(eval(f"(lambda input: {res})({k})"), v)
+
     # ideas for tests:
     # reverse a linked list
     # self-synthesis! use do_synthesis in the grammar
     # regular expressions
-    # ([16, 77, 31], 46), ([60, 9, 61, 63, 1], 2) -> sorted(input)[-1] - sorted(input)[-2] (old lecture 13, slide 48)
-    # Synthesize part of an email address from the address
 
 
 if __name__ == '__main__':
