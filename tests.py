@@ -1,6 +1,7 @@
 import re
 import unittest
 
+import config
 import syntax
 from synthesizer import *
 from stdlib import *
@@ -427,11 +428,33 @@ class SynthesizerTests(unittest.TestCase):
         for k, v in examples:
             self.assertEqual(eval(f"(lambda input: {res})({k})"), v)
 
+    @unittest.skip
+    def test_measure_observational_equivalence(self):
+        config.set_debug(False)
+        import time
+        for n in range(1, 10):
+            print(f"testing with function #{n}")
+            for i in range(-1, 15):
+                if not i: continue
+                # print(f"testing with min_depth={i}")
+                config.set_depth_for_observational_equivalence(i)
+                grammar_for_measuring_observational_equivalence = syntax.parse(f"""
+                PROGRAM ::= EXPR
+                EXPR ::= EXPR OP VAR | VAR
+                VAR ::= input | CONST
+                OP ::= \s+\s | \s*\s
+                CONST ::= 1
+                """)
+                examples = [(0, n), (1, 1 + n), (-2, 4 + n), (3, 9 + n)]
+                time_start = time.time()
+                res = do_synthesis(grammar_for_measuring_observational_equivalence, examples, timeout=-1)
+                time_end = time.time()
+                print(f"{i},{time_end - time_start}")
+            print()
+
     # ideas for tests:
     # reverse a linked list
     # self-synthesis! use do_synthesis in the grammar
-    # regular expressions
-
 
 if __name__ == '__main__':
     unittest.main()
