@@ -258,7 +258,7 @@ class SynthesizerTests(unittest.TestCase):
         OPS ::= \s+\s | \s&\s
         """)
 
-        examples = [(83, 4)]
+        examples = [(83, 4), (32, 1)]
         res = do_synthesis(rules_rec_lists, examples)  # synthesize ~x & (x+1)
         # lecture 11 slide 22
         self.assertIsNotNone(res)
@@ -403,7 +403,7 @@ class SynthesizerTests(unittest.TestCase):
         examples = [([16, 77, 31], 46), ([60, 9, 61, 63, 1], 2), ([5, 4, 3, 2, 1], 1)]
         res = do_synthesis(test_lists_super, examples, timeout=-1)
         # synthesize sorted(input)[-1] - sorted(input)[-2]
-        # lecture 13 slide 48, with an additional example because it was underfitted: both examples had the maximum
+        # lecture 13 slide 48, with an additional example because it was underspecified: both examples had the maximum
         # element in the penultimate position in the list
         self.assertIsNotNone(res)
         print(res)
@@ -429,14 +429,13 @@ class SynthesizerTests(unittest.TestCase):
             self.assertEqual(eval(f"(lambda input: {res})({k})"), v)
 
     @unittest.skip
-    def test_measure_observational_equivalence(self):
+    def test_measure_observational_equivalence1(self):
         config.set_debug(False)
         import time
         for n in range(1, 10):
             print(f"testing with function #{n}")
             for i in range(-1, 15):
                 if not i: continue
-                # print(f"testing with min_depth={i}")
                 config.set_depth_for_observational_equivalence(i)
                 grammar_for_measuring_observational_equivalence = syntax.parse(f"""
                 PROGRAM ::= EXPR
@@ -447,7 +446,31 @@ class SynthesizerTests(unittest.TestCase):
                 """)
                 examples = [(0, n), (1, 1 + n), (-2, 4 + n), (3, 9 + n)]
                 time_start = time.time()
-                res = do_synthesis(grammar_for_measuring_observational_equivalence, examples, timeout=-1)
+                do_synthesis(grammar_for_measuring_observational_equivalence, examples, timeout=-1)
+                time_end = time.time()
+                print(f"{i},{time_end - time_start}")
+            print()
+
+    @unittest.skip
+    def test_measure_observational_equivalence2(self):
+        config.set_debug(False)
+        import time
+        for n in range(2, 10):
+            print(f"testing with function #{n}")
+            for i in range(-1, 15):
+                if not i: continue
+                config.set_depth_for_observational_equivalence(i)
+                grammar_for_measuring_observational_equivalence = syntax.parse(f"""
+                PROGRAM ::= EXPR
+                EXPR ::= [] | [ITEM, *EXPR]
+                # EXPR ::= [INNER_EXPR] | []
+                # INNER_EXPR ::= ITEM | ITEM, INNER_EXPR
+                ITEM ::= CONST | input[CONST]
+                CONST ::= {' | '.join(reversed(list(map(str, range(n)))))}
+                """)
+                examples = [(list(range(n)), list(reversed(range(n))))]
+                time_start = time.time()
+                do_synthesis(grammar_for_measuring_observational_equivalence, examples, timeout=-1)
                 time_end = time.time()
                 print(f"{i},{time_end - time_start}")
             print()

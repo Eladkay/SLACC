@@ -1,6 +1,6 @@
 # General configuration for the Synthesizer
 
-debug = True
+debug = False
 prove = False
 depth_for_observational_equivalence = 5
 

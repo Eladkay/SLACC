@@ -17,20 +17,13 @@
 
 # TODO short term:
 # Make it faster! Better observational equivalence: For some reason it slows down significantly... represent programs as trees
-# Richer STDLIB
-# Multi-threaded synthesis (use subprocess or multiprocessing in Python) - not a great idea
-# Annotations for rules like symmetry and idempotence (auto-generation of symmetry and idempotence breaking rules)
-# Understand why is there so much variance in running times. - it's because the order wasn't deterministic
-# Determinize order - done
 # Join together observational equivalence checker and specification check
-# Save vectors of results for each seen prog - done
 # Constant Cache
+# Imperative synthesis! Details discussed with Orel and Shachar and Matan, wait to receive preprint article from Hila
 
 # TODO idealistically:
-# Detect non-termination of recursion in lambda expressions - literally impossible
-# Synthesis whilelang code? Other languages?
-# Imperative synthesis! Details discussed with Orel and Shachar and Matan, wait to receive preprint article from Hila
-# Adding regex support to syntax - not so interesting
+# Richer STDLIB
+# Annotations for rules like symmetry and idempotence (auto-generation of symmetry and idempotence breaking rules)
 # Tail-recursion optimization (extend the short-circuit)
 
 import profile
@@ -45,9 +38,10 @@ from enum import Enum
 import config
 from ordered_set import OrderedSet
 
+set_used = OrderedSet
 prog_result_cache = {}
 cache = {}
-set_used = OrderedSet
+seen_constants = set_used()
 
 
 class ConstantResult(Enum):
@@ -85,6 +79,8 @@ def do_synthesis(parsed, examples, timeout=60):
     cache = {}
     global prog_result_cache
     prog_result_cache = {}
+    global seen_constants
+    seen_constants = set_used()
     if config.debug:
         print(f"DEBUG: {len(rules)} rules, {len(nonterminals)} nonterminals")
     g = expand(rules, "PROGRAM", nonterminals, examples=examples)
@@ -131,9 +127,9 @@ def check_if_seen_constant(prog_to_test, seen_progs, nonterminals):
                 return ConstantResult.UNDECIDABLE_CONSTANT
             if config.debug:
                 print(f"DEBUG: {prog_to_test} is a constant. Checking if any other are the same constant...")
-            for prog in seen_progs:
+            for prog in seen_constants:
                 try:
-                    if eval_cached(prog, None) == const:  # todo: separate constant cache
+                    if eval_cached(prog, None) == const:
                         if config.debug:
                             print(f"DEBUG: {prog_to_test} is equivalent to {prog} because they are the same constant")
                         return ConstantResult.SEEN_CONSTANT
@@ -144,7 +140,6 @@ def check_if_seen_constant(prog_to_test, seen_progs, nonterminals):
             return ConstantResult.NOT_SEEN_CONSTANT
         except NameError:
             # try proving
-            return ConstantResult.UNDECIDABLE_NOT_A_CONSTANT  # todo
             print(f"DEBUG: {prog_to_test} is not a constant. Trying to prove it's equal to any other program...")
             try:
                 s = Solver()
@@ -187,6 +182,7 @@ def equiv_to_any(seen_progs, prog_to_test, nonterminals, examples):
 
     res = check_if_seen_constant(prog_to_test, seen_progs, nonterminals)
     if res == ConstantResult.SEEN_CONSTANT or res == ConstantResult.SEEN_NOT_A_CONSTANT:
+        seen_constants.add(prog_to_test)
         return True
     if res == ConstantResult.NOT_SEEN_CONSTANT or res == ConstantResult.NOT_SEEN_NOT_A_CONSTANT\
             :#or res == ConstantResult.UNDECIDABLE_CONSTANT:  # not sure about that last part
@@ -263,7 +259,7 @@ def get_values(rule, instances, nonterminals):
             newret = set_used()
             options = instances[token]
             for option in options:
-                newret |= OrderedSet([item + option for item in ret])  # todo - instead of duplicating, a tree
+                newret |= set_used([item + option for item in ret])  # todo - instead of duplicating, a tree
             ret = newret
     return ret - instances[rule.lhs]
 
