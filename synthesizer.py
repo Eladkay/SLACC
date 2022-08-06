@@ -1,5 +1,6 @@
 # SWEET: Synthesis With observational Equivalence (Elad & Tomer)
 # SMART: Synthesis that is Multi-threaded, Abstractized, Recursive and Transparent
+# SLACC: Synthesizer Lacking A Cool Acronym
 
 # Features:
 # Lambda synthesis
@@ -16,13 +17,13 @@
 # Heuristics for observational equivalence use and for determining constants
 
 # TODO short term:
-# Make it faster! Better observational equivalence: For some reason it slows down significantly... represent programs as trees
 # Join together observational equivalence checker and specification check
-# Constant Cache
-# Imperative synthesis! Details discussed with Orel and Shachar and Matan, wait to receive preprint article from Hila
+# Imperative synthesis! Details discussed with Orel and Shachar and Matan, see article by Hila
+# Knuth-Bandix rewriting
 
 # TODO idealistically:
 # Richer STDLIB
+# Explore when OE works well and when it doesn't
 # Annotations for rules like symmetry and idempotence (auto-generation of symmetry and idempotence breaking rules)
 # Tail-recursion optimization (extend the short-circuit)
 

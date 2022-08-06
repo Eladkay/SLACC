@@ -1,6 +1,5 @@
 # thank you to https://lptk.github.io/programming/2019/10/15/simple-essence-y-combinator.html
-z_helper = lambda f: f(f)
-z = (lambda g: z_helper(lambda rec: g(lambda y: rec(rec)(y))))
+z = (lambda g: (lambda rec: g(lambda y: rec(rec)(y)))((lambda rec: g(lambda y: rec(rec)(y)))))
 
 
 def car(x):

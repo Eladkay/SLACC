@@ -272,8 +272,8 @@ class SynthesizerTests(unittest.TestCase):
         EXPR ::= (LAMBDA_REC_EXPR)(input)
         VAR ::= x[0] | x[1]
         LAMBDA_REC_EXPR ::= z(lambda\s rec:\s lambda\s x:\s VAR \sif\s x[0] \s==\s x[1]\s else\s REC_EXPR)
-        REC_EXPR ::= (rec((VAR, VAR_EXPR))\s if\s VAR RELOP VAR \selse\s rec((VAR_EXPR, VAR)))
-        VAR_EXPR ::= x[0] \s-\s x[1] | x[1] \s-\s x[0]
+        REC_EXPR ::= (rec((VAR_EXPR, VAR_EXPR))\s if\s VAR RELOP VAR \selse\s rec((VAR_EXPR, VAR_EXPR))) | VAR_EXPR
+        VAR_EXPR ::= x[0] \s-\s x[1] | x[1] \s-\s x[0] | VAR
         RELOP ::= \s<\s | \s>\s | \s==\s
         """)
 
@@ -392,10 +392,11 @@ class SynthesizerTests(unittest.TestCase):
             self.assertEqual((lambda input: eval(res))(k), v)
 
     def test_lists_super(self):
-        test_lists_super = syntax.parse(r"""
+        hard_version = True
+        test_lists_super = syntax.parse(rf"""
         PROGRAM ::= EXPR
         EXPR ::= LIST[N] | (EXPR OP EXPR)
-        N ::= 0 | 1 | 2 | -1 | -2
+        N ::= 0 | 1 | 2 {"| - N" if hard_version else "| -1 | -2"}
         OP ::= \s-\s | \s+\s 
         LIST ::= input | sorted(input) | reversed(input) | reversed(sorted(input))
         """)
@@ -420,9 +421,11 @@ class SynthesizerTests(unittest.TestCase):
         EXPR_PLUS ::= CONST | (EXPR_PAREN)
         CONST ::= a | b | .
         """)
-        examples = [("aaabcccad", "c"), ("abababa", "a")]
+        examples = [("aaabc", "aaa"), ("aba", "a")]
+        config.set_debug(True)
+        config.set_depth_for_observational_equivalence(-1)
         res = do_synthesis(test_lists_regex, examples, timeout=-1)
-        # synthesize re.match(r".+b(.)", input).group(1)
+        # synthesize re.match(r"(.+)b.", input).group(1)
         self.assertIsNotNone(res)
         print(res)
         for k, v in examples:
@@ -474,6 +477,24 @@ class SynthesizerTests(unittest.TestCase):
                 time_end = time.time()
                 print(f"{i},{time_end - time_start}")
             print()
+
+    @unittest.skip
+    def test_term_rewriting(self):  # TODO
+        test_term_rewriting = syntax.parse(r"""
+        PROGRAM ::= EXPR
+        EXPR ::= LIST[N] | (EXPR OP EXPR)
+        N ::= 0 | 1 | 2 | -1 | -2
+        OP ::= \s-\s | \s+\s 
+        LIST ::= input | sorted(LIST) | reversed(LIST)
+        """)
+
+        examples = [([16, 77, 31], 46), ([60, 9, 61, 63, 1], 2), ([5, 4, 3, 2, 1], 1)]
+        res = do_synthesis(test_term_rewriting, examples, timeout=-1)
+        # synthesize sorted(input)[-1] - sorted(input)[-2]
+        self.assertIsNotNone(res)
+        print(res)
+        for k, v in examples:
+            self.assertEqual(eval(f"(lambda input: {res})({k})"), v)
 
     # ideas for tests:
     # reverse a linked list

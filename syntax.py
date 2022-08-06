@@ -60,11 +60,11 @@ def parse(string: str) -> (list, list):  # (rules, nonterminals)
                     f"{token} is incorrectly named in rule {rule}. Does not match {TOKEN_REGEX}. This is an error.")
         if not TOKEN_REGEX.match(rule.lhs):
             raise ValueError(
-                f"{rule.lhs} is incorrectly defined named. Does not match {TOKEN_REGEX}. This is an error.")
+                f"{rule.lhs} is incorrectly named in rule {rule}. Does not match {TOKEN_REGEX}. This is an error.")
     if "PROGRAM" not in [rule.lhs for rule in ret]:
         raise ValueError("PROGRAM is not defined. This is an error.")
     if len([rule.lhs for rule in ret if rule.lhs == "PROGRAM"]) > 1:
-        raise ValueError("PROGRAM has more than one . This is an error.")
+        raise ValueError("PROGRAM has more than one rule. This is an error.")
     if any(["PROGRAM" in rule.rhs for rule in ret]):
         raise ValueError("PROGRAM is defined in right-hand side of rule. This is an error.")
     nonterminals = set()
