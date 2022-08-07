@@ -15,6 +15,7 @@
 # Short-circuiting for more efficient bottom-up enumeration
 # Bottom-up enumeration!
 # Heuristics for observational equivalence use and for determining constants
+# OE benchmarking
 
 # TODO short term:
 # Join together observational equivalence checker and specification check
