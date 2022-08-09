@@ -21,6 +21,8 @@
 # Join together observational equivalence checker and specification check
 # Imperative synthesis! Details discussed with Orel and Shachar and Matan, see article by Hila
 # Knuth-Bandix rewriting
+# Change OE to hashtable
+# Perform grow only on last layer
 
 # TODO idealistically:
 # Richer STDLIB
@@ -172,11 +174,6 @@ def equiv_to_any(seen_progs, prog_to_test, nonterminals, examples):
     if check_if_function(prog_to_test):
         return False  # function equivalence is undecidable
 
-    if any(it in prog_to_test for it in nonterminals):
-        if config.debug:
-            print(f"DEBUG: {prog_to_test} contains a nonterminal, is it in seen_progs? {prog_to_test in seen_progs}")
-        return prog_to_test in seen_progs
-
     if prog_to_test in seen_progs:
         if config.debug:
             print(f"DEBUG: {prog_to_test} is in seen_progs")
@@ -272,9 +269,7 @@ def short_circuit(new_values, nonterminals, rules):
     while changed:
         changed = False
         for rule in rules:
-            if len([it for it in rules if it.lhs == rule.lhs]) > 1:
-                continue  # todo?
-            if not (len(rule.rhs) == 1 and rule.rhs[0] in nonterminals):
+            if not (len(rule.rhs) == 1 and rule.rhs[0] in nonterminals):  # todo - expand the tail call optimization
                 continue
             if not new_values[rule.rhs[0]]:
                 continue

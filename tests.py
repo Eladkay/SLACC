@@ -139,7 +139,7 @@ class SynthesizerTests(unittest.TestCase):
     def test_listcomp(self):
         rules_listcomp = syntax.parse(r"""
         PROGRAM ::= LIST
-        LIST ::= [EXPR \sfor\sx\sin\s input \sif\s BEXP]
+        LIST ::= [EXPR \sfor \sx \sin \sinput \sif\s BEXP]
         BEXP ::= EXPR RELOP EXPR
         RELOP ::= \s<=\s | \s>=\s | \s<\s | \s>\s | \s==\s | \s!=\s
         EXPR ::= CONST | EXPR OP EXPR
@@ -252,8 +252,7 @@ class SynthesizerTests(unittest.TestCase):
     def test_bitwise_ops(self):
         rules_rec_lists = syntax.parse(r"""
         PROGRAM ::= VAR 
-        VAR ::= CONST | input | ( VAR OPS VAR ) | ~ VAR_NO_NEG
-        VAR_NO_NEG ::= input | ( VAR OPS VAR )
+        VAR ::= CONST | input | ( VAR OPS VAR ) | ~ VAR
         CONST ::= 0 | 1
         OPS ::= \s+\s | \s&\s
         """)
@@ -392,7 +391,7 @@ class SynthesizerTests(unittest.TestCase):
             self.assertEqual((lambda input: eval(res))(k), v)
 
     def test_lists_super(self):
-        hard_version = True
+        hard_version = False
         test_lists_super = syntax.parse(rf"""
         PROGRAM ::= EXPR
         EXPR ::= LIST[N] | (EXPR OP EXPR)
