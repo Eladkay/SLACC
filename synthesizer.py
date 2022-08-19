@@ -35,7 +35,7 @@ from typing import List
 from z3 import Solver, Int, ForAll, sat, Z3Exception
 from stdlib import *
 import syntax
-from syntax import Rule
+from syntax import CfgRule
 import cProfile
 import random
 from enum import Enum
@@ -73,7 +73,7 @@ def eval_cached(prog, input):
         return NoResult()  # x s.t. x != x
 
 
-def do_synthesis(parsed, examples, timeout=60):
+def do_synthesis(parsed, examples, timeout=60, trs=None, depth_limit=None):  # TRS is WIP
     """
     Synthesize a program from a list of expressions and examples.
     """
@@ -87,7 +87,7 @@ def do_synthesis(parsed, examples, timeout=60):
     seen_constants = set_used()
     if config.debug:
         print(f"DEBUG: {len(rules)} rules, {len(nonterminals)} nonterminals")
-    g = expand(rules, "PROGRAM", nonterminals, examples=examples)
+    g = expand(rules, "PROGRAM", nonterminals, examples=examples, trs=trs, depth_limit=depth_limit)
     start_time = time.time()
     while timeout < 0 or time.time() - start_time < timeout:
         try:
@@ -96,7 +96,7 @@ def do_synthesis(parsed, examples, timeout=60):
                 print("DEBUG: trying", prog)
         except StopIteration:
             if config.debug:
-                print("DEBUG: ran out of possible programs")
+                print("DEBUG: ran out of possible programs or reached depth limit")
             return None
         if all(eval_cached(prog, item[0]) == item[1] for item in examples):
             if config.debug:
@@ -183,8 +183,8 @@ def equiv_to_any(seen_progs, prog_to_test, nonterminals, examples):
     if res == ConstantResult.SEEN_CONSTANT or res == ConstantResult.SEEN_NOT_A_CONSTANT:
         seen_constants.add(prog_to_test)
         return True
-    if res == ConstantResult.NOT_SEEN_CONSTANT or res == ConstantResult.NOT_SEEN_NOT_A_CONSTANT\
-            :#or res == ConstantResult.UNDECIDABLE_CONSTANT:  # not sure about that last part
+    if res == ConstantResult.NOT_SEEN_CONSTANT or res == ConstantResult.NOT_SEEN_NOT_A_CONSTANT \
+            :  # or res == ConstantResult.UNDECIDABLE_CONSTANT:  # not sure about that last part
         return False
 
     if config.prove:
@@ -269,20 +269,36 @@ def short_circuit(new_values, nonterminals, rules):
     while changed:
         changed = False
         for rule in rules:
-            if not (len(rule.rhs) == 1 and rule.rhs[0] in nonterminals):  # todo - expand the tail call optimization
+            nonterminals = [x for x in rule.rhs if x in nonterminals]
+            if len(nonterminals) != 1 \
+                    or rule.rhs[0] not in nonterminals:  # todo
                 continue
-            if not new_values[rule.rhs[0]]:
+            nonterminal = nonterminals[0]
+            if not new_values[nonterminal]:
                 continue
             old_len = len(extra[rule.lhs])
-            extra[rule.lhs].update(new_values[rule.rhs[0]])
+            # extra[rule.lhs].update({tuple(value if it == nonterminal else it for it in rule.rhs)
+            #                         for value in new_values[nonterminal]})
+            extra[rule.lhs].update(new_values[rule.rhs[0]])  # todo
             if old_len != len(extra[rule.lhs]):
                 changed = True
                 if config.debug:
-                    print(f"DEBUG: {len(new_values[rule.rhs[0]])} elements short-circuited using rule {rule}")
+                    print(f"DEBUG: {len(extra[rule.lhs]) - old_len} elements short-circuited using rule {rule}")
     return extra
 
 
-def expand(rules: List[Rule], initial, nonterminals, examples):
+def apply_trs(string, trs):
+    changed = True
+    while changed:
+        changed = False
+        for k, v in trs:
+            if k.search(string):
+                string = k.sub(v, string)
+                changed = True
+    return string
+
+
+def expand(rules: List[CfgRule], initial, nonterminals, examples, trs, depth_limit):
     # Bottom-Up Enumeration
     current_height = 1
     instances = {it: get_ground_exprs(it, rules, nonterminals) for it in nonterminals}
@@ -300,6 +316,9 @@ def expand(rules: List[Rule], initial, nonterminals, examples):
         if current_height == config.depth_for_observational_equivalence:
             instances, instances_joined = clean_instances(instances, nonterminals, examples)
 
+        if depth_limit and current_height == depth_limit:
+            return
+
         new_values = {it: set_used() for it in nonterminals}
         new_values_joined = {it: set_used() for it in nonterminals}
         for rule in rules:
@@ -311,7 +330,7 @@ def expand(rules: List[Rule], initial, nonterminals, examples):
                     print(f"DEBUG: application of rule {rule} gave {len(rule_values)} values, for example"
                           f" {''.join(random.choice(list(rule_values)))}")
             flag = False
-            check_equiv = False
+            found_equiv = False
             if config.depth_for_observational_equivalence > current_height \
                     or config.depth_for_observational_equivalence < 0:
                 if config.debug:
@@ -322,34 +341,34 @@ def expand(rules: List[Rule], initial, nonterminals, examples):
                         print(f"DEBUG: skipping equivalence checking because it is disabled in config.py")
                 flag = True
             for value in rule_values:
+                joined = ''.join(value)
                 if not flag:
                     if config.debug:
-                        print(f"DEBUG: checking for equivalence with {''.join(value)}...")
-                    try:
-                        check_equiv = equiv_to_any(instances_joined[rule.lhs].union(new_values_joined[rule.lhs]),
-                                                   ''.join(value), nonterminals, examples)
-                    except Z3Exception:
-                        config.prove = False
-                        check_equiv = equiv_to_any(instances_joined[rule.lhs].union(new_values_joined[rule.lhs]),
-                                                   ''.join(value), nonterminals, examples)
-                if not check_equiv:
+                        print(f"DEBUG: checking for equivalence with {joined}...")
+                    found_equiv = equiv_to_any(instances_joined[rule.lhs] | new_values_joined[rule.lhs],
+                                               joined, nonterminals, examples)
+                if not found_equiv:
                     new_values[rule.lhs].add(value)
-                    new_values_joined[rule.lhs].add(''.join(value))
+                    new_values_joined[rule.lhs].add(joined)
                     if rule.lhs == initial:
-                        prog_result_cache[''.join(value)] = [eval_cached(''.join(value), k) for k, _ in examples]
-                        yield ''.join(value)
+                        prog_result_cache[joined] = [eval_cached(joined, k) for k, _ in examples]
+                        yield joined
         if len(list(len(new_values[it]) > 0 for it in nonterminals)) == 0:
             break
         short_circuited = short_circuit(new_values, nonterminals, rules)
-        for value in short_circuited[initial]:
-            prog_result_cache[''.join(value)] = [eval_cached(''.join(value), k) for k, _ in examples]
-            yield ''.join(value)
+        short_circuited_joined = {it: map(lambda x: ''.join(x), short_circuited[it]) for it in nonterminals}
+        for value in short_circuited_joined[initial]:
+            prog_result_cache[value] = [eval_cached(value, k) for k, _ in examples]
+            yield value
         for k in nonterminals:
-            instances[k] |= short_circuited[k]
-            instances[k] |= new_values[k]
-            for val in short_circuited[k].union(new_values_joined[k]):
-                if all(nonterminal not in val for nonterminal in nonterminals):
-                    instances_joined[k].add(val)
+            for val in short_circuited[k] | new_values[k]:
+                joined = ''.join(val)
+                if trs:
+                    joined = apply_trs(joined, trs)
+                flag = joined in instances_joined[k]
+                if not flag:
+                    instances_joined[k].add(joined)
+                    instances[k].add(val)
         current_height += 1
 
 
