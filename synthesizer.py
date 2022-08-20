@@ -39,6 +39,7 @@ import random
 from enum import Enum
 import config
 from ordered_set import OrderedSet
+import time
 
 set_used = OrderedSet
 prog_result_cache = {}
@@ -80,8 +81,8 @@ def do_synthesis(parsed, examples, timeout=60, trs=None, depth_limit=None):
     """
     Synthesize a program from a list of expressions and examples.
     """
-    import time
     rules, nonterminals = parsed
+
     global cache
     cache = {}
     global prog_result_cache
@@ -168,10 +169,10 @@ def equiv_to_any(seen_progs, prog_to_test, nonterminals, examples):
 
     res = check_if_seen_constant(prog_to_test, seen_progs, nonterminals)
     if res == ConstantResult.SEEN_CONSTANT or res == ConstantResult.SEEN_NOT_A_CONSTANT:
-        seen_constants.add(prog_to_test)
         return True
-    if res == ConstantResult.NOT_SEEN_CONSTANT or res == ConstantResult.NOT_SEEN_NOT_A_CONSTANT \
-            :  # or res == ConstantResult.UNDECIDABLE_CONSTANT:  # not sure about that last part
+    if res == ConstantResult.NOT_SEEN_CONSTANT or res == ConstantResult.NOT_SEEN_NOT_A_CONSTANT or \
+            res == ConstantResult.UNDECIDABLE_CONSTANT:
+        seen_constants.add(prog_to_test)
         return False
 
     if config.prove:
@@ -234,17 +235,17 @@ def clean_instances(instances, nonterminals, examples):
 
 
 def get_values(rule, instances, nonterminals):
-    ret = set_used([()])
+    ret = [()]
     for token in rule.rhs:
         if token not in nonterminals:
-            ret = set_used([item + (token,) for item in ret])
+            ret = [item + (token,) for item in ret]
         else:
-            newret = set_used()
+            newret = []
             options = instances[token]
             for option in options:
-                newret |= set_used([item + option for item in ret])  # todo - instead of duplicating, a tree
+                newret.extend([item + option for item in ret])
             ret = newret
-    return ret - instances[rule.lhs]
+    return set_used(ret)
 
 
 def short_circuit(new_values, nonterminals, rules):
@@ -294,7 +295,6 @@ def expand(rules: List[CfgRule], initial, nonterminals, examples, trs, depth_lim
     while True:
         if current_height == depth_limit:
             return
-
         debug(f"DEBUG: Currently trying expressions of height {current_height}")
 
         if current_height == config.depth_for_observational_equivalence:
@@ -341,6 +341,7 @@ def expand(rules: List[CfgRule], initial, nonterminals, examples, trs, depth_lim
         for value in short_circuited_joined[initial]:
             prog_result_cache[value] = [eval_cached(value, k) for k, _ in examples]
             yield value
+
         for k in nonterminals:
             new_instances = []
             new_instances_joined = []
@@ -355,38 +356,3 @@ def expand(rules: List[CfgRule], initial, nonterminals, examples, trs, depth_lim
             instances_joined[k] |= set_used(new_instances_joined)
             instances[k] |= set_used(new_instances)
         current_height += 1
-
-
-if __name__ == '__main__':
-    # rules_listcomp_for_profiling = syntax.parse(r"""
-    #        PROGRAM ::= LIST
-    #        LIST ::= [EXPR \sfor\sx\sin\s input \sif\s BEXP]  # can also do [EXPR ... but 10 times slower
-    #        BEXP ::= EXPR RELOP EXPR
-    #        RELOP ::= \s<=\s | \s>=\s | \s<\s | \s>\s | \s==\s | \s!=\s
-    #        EXPR ::= CONST | EXPR OP EXPR
-    #        OP ::= \s+\s | \s-\s | \s/\s | \s*\s
-    #        CONST ::= 0 | 1 | x
-    #        """)
-    #
-    # examples_for_profiling = [([-1, 3, -2, 1], [4, 2])]
-    # profile.run("do_synthesis(rules_listcomp_for_profiling, examples_for_profiling, timeout=-1)")
-    # rules_listops_advanced_for_profiling = syntax.parse(r"""
-    #         PROGRAM ::= L
-    #         L ::= (L1 \s+\s L) | sorted(L3) | L2[N:N] | [N] | input
-    #         L1 ::= sorted(L3) | L2[N:N] | [N] | input
-    #         L2 ::= (L1 \s+\s L) | sorted(L3) | input
-    #         L3 ::= (L1 \s+\s L) | L2[N:N] | input
-    #         N ::= L.index(N) | 0
-    #         """)
-    #
-    # examples_for_profiling = [([1, 4, 7, 2, 0, 6, 9, 2, 5, 0, 3, 2, 4, 7], [1, 2, 4, 7])]
-    # profile.run("do_synthesis(rules_listops_advanced_for_profiling, examples_for_profiling, timeout=-1)")
-
-    test_mai_basic_for_profiling = syntax.parse(r"""
-            PROGRAM ::= EXPR
-            EXPR ::= CONST | EXPR OP EXPR
-            OP ::= * | + | / | -
-            CONST ::= 0 | 1 | 3 | 5 | input
-            """)
-    examples_for_profiling = [(1, 8), (2, 11), (3, 14), (4, 17), (5, 20), (6, 23)]
-    profile.run("do_synthesis(test_mai_basic_for_profiling, examples_for_profiling, timeout=-1)")

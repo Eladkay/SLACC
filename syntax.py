@@ -1,4 +1,3 @@
-from adt.tree import *
 import re
 
 
