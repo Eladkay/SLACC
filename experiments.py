@@ -27,7 +27,6 @@ class SynthesizerExperimentsTests(unittest.TestCase):
         for k, v in examples:
             self.assertEqual(eval(f"(lambda input: {res})({k})"), v)
 
-    @unittest.skip
     def test_measure_observational_equivalence1(self):
         config.set_debug(False)
         import time
@@ -50,7 +49,6 @@ class SynthesizerExperimentsTests(unittest.TestCase):
                 print(f"{i},{time_end - time_start}")
             print()
 
-    @unittest.skip
     def test_measure_observational_equivalence2(self):
         config.set_debug(False)
         import time
@@ -74,7 +72,7 @@ class SynthesizerExperimentsTests(unittest.TestCase):
                 print(f"{i},{time_end - time_start}")
             print()
 
-    @unittest.skip  # takes too much memory right now
+    # takes too much memory right now
     def test_regex(self):
         test_lists_regex = syntax.parse(r"""
         PROGRAM ::= re.match(r" EXPR ",\s input).group(1)
@@ -94,10 +92,9 @@ class SynthesizerExperimentsTests(unittest.TestCase):
         for k, v in examples:
             self.assertEqual(eval(f"(lambda input: {res})({k})"), v)
 
-    @unittest.skip
     def test_self_synthesis(self):
         test_self_synthesis = syntax.parse(r"""
-        PROGRAM ::= eval(do_synthesis(GRAMMAR,\s EXAMPLES,\s depth_limit=3))(input)
+        PROGRAM ::= eval(do_synthesis(GRAMMAR,\s EXAMPLES,\s depth_limit=3))
         GRAMMAR ::= syntax.parse(f' GRAMMAR_INT ')
         GRAMMAR_INT ::= RULE | GRAMMAR_INT \ n RULE
         RULE ::= {"program".upper()} \s: : =\s {"expr".upper()}

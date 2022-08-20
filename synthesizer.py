@@ -16,23 +16,21 @@
 # Bottom-up enumeration!
 # Heuristics for observational equivalence use and for determining constants
 # OE benchmarking
+# Term rewriting systems
 
 # TODO short term:
 # Join together observational equivalence checker and specification check
-# Imperative synthesis! Details discussed with Orel and Shachar and Matan, see article by Hila
-# Knuth-Bandix rewriting
 # Change OE to hashtable
 # Perform grow only on last layer
+# Tail-recursion optimization (extend the short-circuit)
+# Update README for TRS (inc. syntax) and depth limit
 
 # TODO idealistically:
-# Richer STDLIB
-# Explore when OE works well and when it doesn't
-# Annotations for rules like symmetry and idempotence (auto-generation of symmetry and idempotence breaking rules)
-# Tail-recursion optimization (extend the short-circuit)
+# Imperative synthesis! Details discussed with Orel and Shachar and Matan, see article by Hila
 
 import profile
 from typing import List
-from z3 import Solver, Int, ForAll, sat, Z3Exception
+from z3 import Solver, Int, ForAll, sat, Z3Exception, Exists
 from stdlib import *
 import syntax
 from syntax import CfgRule
@@ -73,7 +71,12 @@ def eval_cached(prog, input):
         return NoResult()  # x s.t. x != x
 
 
-def do_synthesis(parsed, examples, timeout=60, trs=None, depth_limit=None):  # TRS is WIP
+def debug(*args):
+    if config.debug:
+        print(*args)
+
+
+def do_synthesis(parsed, examples, timeout=60, trs=None, depth_limit=None):
     """
     Synthesize a program from a list of expressions and examples.
     """
@@ -85,33 +88,29 @@ def do_synthesis(parsed, examples, timeout=60, trs=None, depth_limit=None):  # T
     prog_result_cache = {}
     global seen_constants
     seen_constants = set_used()
-    if config.debug:
-        print(f"DEBUG: {len(rules)} rules, {len(nonterminals)} nonterminals")
+
+    debug(f"DEBUG: {len(rules)} rules, {len(nonterminals)} nonterminals")
+
     g = expand(rules, "PROGRAM", nonterminals, examples=examples, trs=trs, depth_limit=depth_limit)
     start_time = time.time()
     while timeout < 0 or time.time() - start_time < timeout:
         try:
             prog = next(g)
-            if config.debug:
-                print("DEBUG: trying", prog)
+            debug("DEBUG: trying", prog)
         except StopIteration:
-            if config.debug:
-                print("DEBUG: ran out of possible programs or reached depth limit")
+            debug("DEBUG: ran out of possible programs or reached depth limit")
             return None
         if all(eval_cached(prog, item[0]) == item[1] for item in examples):
-            if config.debug:
-                print("DEBUG: found", prog)
+            debug("DEBUG: found", prog)
             return prog
-    if config.debug:
-        print("DEBUG: timeout")
+    debug("DEBUG: timeout")
     return None
 
 
 def check_if_function(prog_to_test):
     try:
         if callable(eval_cached(prog_to_test, None)):
-            if config.debug:
-                print(f"DEBUG: {prog_to_test} is a function and therefore observational equivalence is undecidable")
+            debug(f"DEBUG: {prog_to_test} is a function and therefore observational equivalence is undecidable")
             return True
     except:
         pass
@@ -120,50 +119,38 @@ def check_if_function(prog_to_test):
 
 def check_if_seen_constant(prog_to_test, seen_progs, nonterminals):
     if "input" not in prog_to_test:  # heuristic. constants in general are undecidable
-        if config.debug:
-            print(f"DEBUG: {prog_to_test} does not contain input. Checking if it is a constant...")
+        debug(f"DEBUG: {prog_to_test} does not contain input. Checking if it is a constant...")
         try:
             const = eval_cached(prog_to_test, None)
             if callable(const) or type(const) == NoResult:
-                if config.debug:
-                    print(f"DEBUG: {prog_to_test} is not necessarily a constant and therefore observational equivalence"
-                          f" is undecidable")
+                debug(f"DEBUG: {prog_to_test} is not necessarily a constant and therefore observational equivalence"
+                      f" is undecidable")
                 return ConstantResult.UNDECIDABLE_CONSTANT
-            if config.debug:
-                print(f"DEBUG: {prog_to_test} is a constant. Checking if any other are the same constant...")
+            debug(f"DEBUG: {prog_to_test} is a constant. Checking if any other are the same constant...")
             for prog in seen_constants:
-                try:
-                    if eval_cached(prog, None) == const:
-                        if config.debug:
-                            print(f"DEBUG: {prog_to_test} is equivalent to {prog} because they are the same constant")
-                        return ConstantResult.SEEN_CONSTANT
-                except:
-                    pass
-            if config.debug:
-                print(f"DEBUG: {prog_to_test} is a not-yet seen constant")
+                if eval_cached(prog, None) == const:
+                    debug(f"DEBUG: {prog_to_test} is equivalent to {prog} because they are the same constant")
+                    return ConstantResult.SEEN_CONSTANT
+            debug(f"DEBUG: {prog_to_test} is a not-yet seen constant")
             return ConstantResult.NOT_SEEN_CONSTANT
         except NameError:
             # try proving
-            print(f"DEBUG: {prog_to_test} is not a constant. Trying to prove it's equal to any other program...")
+            debug(f"DEBUG: {prog_to_test} is not a constant. Trying to prove it's equal to any other program...")
             try:
                 s = Solver()
                 x, y, z, w, n = Int('x'), Int('y'), Int('z'), Int('w'), Int('n')
                 for prog in seen_progs:
-                    if any(it in prog for it in nonterminals):
-                        continue
                     try:
                         s.add(Exists([x, y, z, w, n], eval_cached(prog_to_test, None) != eval_cached(prog, None)))
                     except:
                         pass
                 status = s.check()
                 if status != sat:
-                    if config.debug:
-                        print(f"DEBUG: {prog_to_test} is equivalent to another program provably")
+                    debug(f"DEBUG: {prog_to_test} is equivalent to another program provably")
                     return ConstantResult.SEEN_NOT_A_CONSTANT
             except Z3Exception:
                 return ConstantResult.UNDECIDABLE_NOT_A_CONSTANT  # not much we can do
-            if config.debug:
-                print(f"DEBUG: {prog_to_test} is not provably equivalent to another program.")
+            debug(f"DEBUG: {prog_to_test} is not provably equivalent to another program.")
             return ConstantResult.NOT_SEEN_NOT_A_CONSTANT
         except:
             return ConstantResult.UNDECIDABLE_NOT_A_CONSTANT  # not much we can do
@@ -171,12 +158,12 @@ def check_if_seen_constant(prog_to_test, seen_progs, nonterminals):
 
 
 def equiv_to_any(seen_progs, prog_to_test, nonterminals, examples):
+    debug(f"DEBUG: checking for equivalence with {prog_to_test}...")
     if check_if_function(prog_to_test):
         return False  # function equivalence is undecidable
 
     if prog_to_test in seen_progs:
-        if config.debug:
-            print(f"DEBUG: {prog_to_test} is in seen_progs")
+        debug(f"DEBUG: {prog_to_test} is in seen_progs")
         return True
 
     res = check_if_seen_constant(prog_to_test, seen_progs, nonterminals)
@@ -194,8 +181,7 @@ def equiv_to_any(seen_progs, prog_to_test, nonterminals, examples):
             s.add(ForAll([input], eval_cached(prog, input) == eval_cached(prog_to_test, input)))
             status = s.check()
             if status == sat:
-                if config.debug:
-                    print(f"DEBUG: {prog_to_test} is equivalent to {prog} provably")
+                debug(f"DEBUG: {prog_to_test} is equivalent to {prog} provably")
                 return True
     else:
         try:
@@ -209,8 +195,7 @@ def equiv_to_any(seen_progs, prog_to_test, nonterminals, examples):
                 results_vector = [eval_cached(prog, k) for k, _ in examples]
                 prog_result_cache[prog] = results_vector
             if x_outs == results_vector:
-                if config.debug:
-                    print(f"DEBUG: {prog_to_test} exhibits observational equivalence with {prog}")
+                debug(f"DEBUG: {prog_to_test} exhibits observational equivalence with {prog}")
                 prog_result_cache[prog_to_test] = prog_result_cache[prog]
                 return True
     return False
@@ -237,13 +222,12 @@ def get_ground_exprs(initial, rules, nonterminals) -> set_used:
 
 
 def clean_instances(instances, nonterminals, examples):
-    if config.debug:
-        print("DEBUG: Reached threshold for observational equivalence, cleaning instances set...")
+    debug("DEBUG: Reached threshold for observational equivalence, cleaning instances set...")
     ret = {it: set_used() for it in nonterminals}
     ret_joined = {it: set_used() for it in nonterminals}
     for k in nonterminals:
         for v in instances[k]:
-            if equiv_to_any(ret_joined[k], ''.join(v), nonterminals, examples):
+            if not equiv_to_any(ret_joined[k], ''.join(v), nonterminals, examples):
                 ret[k].add(v)
                 ret_joined[k].add(''.join(v))
     return ret, ret_joined
@@ -282,8 +266,7 @@ def short_circuit(new_values, nonterminals, rules):
             extra[rule.lhs].update(new_values[rule.rhs[0]])  # todo
             if old_len != len(extra[rule.lhs]):
                 changed = True
-                if config.debug:
-                    print(f"DEBUG: {len(extra[rule.lhs]) - old_len} elements short-circuited using rule {rule}")
+                debug(f"DEBUG: {len(extra[rule.lhs]) - old_len} elements short-circuited using rule {rule}")
     return extra
 
 
@@ -305,70 +288,72 @@ def expand(rules: List[CfgRule], initial, nonterminals, examples, trs, depth_lim
     instances_joined = {it: {''.join(itt) for itt in instances[it]} for it in nonterminals}
     global prog_result_cache
     prog_result_cache = {it: [eval_cached(it, k) for k, _ in examples] for it in instances_joined[initial]}
-    if config.debug:
-        print(f"DEBUG: Currently trying ground expressions")
+    debug(f"DEBUG: Currently trying ground expressions")
     for instance in instances[initial]:
         yield ''.join(instance)
     while True:
-        if config.debug:
-            print(f"DEBUG: Currently trying expressions of height {current_height}")
+        if current_height == depth_limit:
+            return
+
+        debug(f"DEBUG: Currently trying expressions of height {current_height}")
 
         if current_height == config.depth_for_observational_equivalence:
             instances, instances_joined = clean_instances(instances, nonterminals, examples)
-
-        if depth_limit and current_height == depth_limit:
-            return
 
         new_values = {it: set_used() for it in nonterminals}
         new_values_joined = {it: set_used() for it in nonterminals}
         for rule in rules:
             rule_values = get_values(rule, instances, nonterminals)
-            if config.debug:
-                if not rule_values:
-                    print(f"DEBUG: application of rule {rule} gave nothing new")
-                else:
-                    print(f"DEBUG: application of rule {rule} gave {len(rule_values)} values, for example"
-                          f" {''.join(random.choice(list(rule_values)))}")
-            flag = False
-            found_equiv = False
-            if config.depth_for_observational_equivalence > current_height \
-                    or config.depth_for_observational_equivalence < 0:
-                if config.debug:
-                    if config.depth_for_observational_equivalence > current_height:
-                        print(f"DEBUG: Observational equivalence is not checked for expressions"
-                              f" of height {current_height}")
-                    else:
-                        print(f"DEBUG: skipping equivalence checking because it is disabled in config.py")
-                flag = True
+            if not rule_values:
+                debug(f"DEBUG: application of rule {rule} gave nothing new")
+            else:
+                debug(f"DEBUG: application of rule {rule} gave {len(rule_values)} values, for example"
+                      f" {''.join(random.choice(list(rule_values)))}")
+
+            skipped = config.depth_for_observational_equivalence > current_height or \
+                      config.depth_for_observational_equivalence < 0
+            if config.depth_for_observational_equivalence > current_height:
+                debug(f"DEBUG: Observational equivalence is not checked for expressions of height {current_height}")
+            elif config.depth_for_observational_equivalence < 0:
+                debug(f"DEBUG: skipping equivalence checking because it is disabled in config.py")
+
+            new_values_for_lhs = []
+            new_values_for_lhs_joined = []
             for value in rule_values:
                 joined = ''.join(value)
-                if not flag:
-                    if config.debug:
-                        print(f"DEBUG: checking for equivalence with {joined}...")
-                    found_equiv = equiv_to_any(instances_joined[rule.lhs] | new_values_joined[rule.lhs],
-                                               joined, nonterminals, examples)
+                found_equiv = (not skipped) and equiv_to_any(instances_joined[rule.lhs] | new_values_joined[rule.lhs],
+                                                            joined, nonterminals, examples)
                 if not found_equiv:
-                    new_values[rule.lhs].add(value)
-                    new_values_joined[rule.lhs].add(joined)
+                    new_values_for_lhs.append(value)
+                    new_values_for_lhs_joined.append(joined)
                     if rule.lhs == initial:
                         prog_result_cache[joined] = [eval_cached(joined, k) for k, _ in examples]
                         yield joined
-        if len(list(len(new_values[it]) > 0 for it in nonterminals)) == 0:
-            break
+
+            new_values[rule.lhs] |= set_used(new_values_for_lhs)
+            new_values_joined[rule.lhs] |= set_used(new_values_for_lhs_joined)
+
+        if len(list(it for it in nonterminals if len(new_values[it]) > 0)) == 0:
+            return
+
         short_circuited = short_circuit(new_values, nonterminals, rules)
         short_circuited_joined = {it: map(lambda x: ''.join(x), short_circuited[it]) for it in nonterminals}
         for value in short_circuited_joined[initial]:
             prog_result_cache[value] = [eval_cached(value, k) for k, _ in examples]
             yield value
         for k in nonterminals:
+            new_instances = []
+            new_instances_joined = []
             for val in short_circuited[k] | new_values[k]:
                 joined = ''.join(val)
                 if trs:
                     joined = apply_trs(joined, trs)
                 flag = joined in instances_joined[k]
                 if not flag:
-                    instances_joined[k].add(joined)
-                    instances[k].add(val)
+                    new_instances.append(val)
+                    new_instances_joined.append(joined)
+            instances_joined[k] |= set_used(new_instances_joined)
+            instances[k] |= set_used(new_instances)
         current_height += 1
 
 
@@ -385,14 +370,23 @@ if __name__ == '__main__':
     #
     # examples_for_profiling = [([-1, 3, -2, 1], [4, 2])]
     # profile.run("do_synthesis(rules_listcomp_for_profiling, examples_for_profiling, timeout=-1)")
-    rules_listops_advanced_for_profiling = syntax.parse(r"""
-            PROGRAM ::= L
-            L ::= (L1 \s+\s L) | sorted(L3) | L2[N:N] | [N] | input
-            L1 ::= sorted(L3) | L2[N:N] | [N] | input
-            L2 ::= (L1 \s+\s L) | sorted(L3) | input
-            L3 ::= (L1 \s+\s L) | L2[N:N] | input
-            N ::= L.index(N) | 0
-            """)
+    # rules_listops_advanced_for_profiling = syntax.parse(r"""
+    #         PROGRAM ::= L
+    #         L ::= (L1 \s+\s L) | sorted(L3) | L2[N:N] | [N] | input
+    #         L1 ::= sorted(L3) | L2[N:N] | [N] | input
+    #         L2 ::= (L1 \s+\s L) | sorted(L3) | input
+    #         L3 ::= (L1 \s+\s L) | L2[N:N] | input
+    #         N ::= L.index(N) | 0
+    #         """)
+    #
+    # examples_for_profiling = [([1, 4, 7, 2, 0, 6, 9, 2, 5, 0, 3, 2, 4, 7], [1, 2, 4, 7])]
+    # profile.run("do_synthesis(rules_listops_advanced_for_profiling, examples_for_profiling, timeout=-1)")
 
-    examples_for_profiling = [([1, 4, 7, 2, 0, 6, 9, 2, 5, 0, 3, 2, 4, 7], [1, 2, 4, 7])]
-    profile.run("do_synthesis(rules_listops_advanced_for_profiling, examples_for_profiling, timeout=-1)")
+    test_mai_basic_for_profiling = syntax.parse(r"""
+            PROGRAM ::= EXPR
+            EXPR ::= CONST | EXPR OP EXPR
+            OP ::= * | + | / | -
+            CONST ::= 0 | 1 | 3 | 5 | input
+            """)
+    examples_for_profiling = [(1, 8), (2, 11), (3, 14), (4, 17), (5, 20), (6, 23)]
+    profile.run("do_synthesis(test_mai_basic_for_profiling, examples_for_profiling, timeout=-1)")
