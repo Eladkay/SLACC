@@ -464,6 +464,78 @@ class SynthesizerTests(unittest.TestCase):
         for k, v in examples:
             self.assertEqual(eval(f"(lambda input: {res})({k})"), v)
 
+    def test_term_rewriting_advanced(self):
+        test_term_rewriting_advanced = syntax.parse(r"""
+        PROGRAM ::= EXPR
+        EXPR ::= (EXPR1) \sif\s BOOL \selse\s (EXPR1)
+        EXPR1 ::= CONST | EXPR
+        BOOL ::= CONST RELOP CONST | True | False
+        CONST ::= 0 | 1 | input
+        RELOP ::= < | <= | > | >= | == | !=
+        """)
+        test_term_rewriting_advanced_trs = syntax.parse_term_rewriting_rules(r"""
+        ^\(([^)]*)\) if True else \(([^)]*)\)$ -> \1
+        ^\(([^)]*)\) if False else \(([^)]*)\)$ -> \2
+        ^[01] <=? 1$ -> True
+        ^1 [<=]=? 0$ -> False
+        ^0 [>=]=? 1$ -> False
+        ^[01] >=? 0$ -> True
+        ^1 == 1$ -> True
+        ^0 == 0$ -> True
+        """)
+
+        examples = [(5, 5)]
+        res = do_synthesis(test_term_rewriting_advanced, examples, trs=test_term_rewriting_advanced_trs)
+        # synthesize input
+        self.assertIsNotNone(res)
+        print(res)
+        for k, v in examples:
+            self.assertEqual(eval(f"(lambda input: {res})({k})"), v)
+
+    def test_reverse_linked_list(self):
+        test_reverse_linked_list = syntax.parse(r"""
+        PROGRAM ::= (z(lambda\s rec:\s lambda\s x:\s x\s if\s not\s x\s else\s LIST))(input)
+        LIST ::= x | LIST.next | concat(LIST,\s LIST) | linked_list(LIST.value) | rec(LIST.next)
+        """)
+
+        examples = [(linked_list(5, linked_list(3, linked_list(1))), linked_list(1, linked_list(3, linked_list(5))))]
+        res = do_synthesis(test_reverse_linked_list, examples)
+        # synthesize z(lambda rec: lambda x: x if not x else concat(rec(x.next), linked_list(x.value)))(input)
+        self.assertIsNotNone(res)
+        print(res)
+        for k, v in examples:
+            self.assertEqual(eval(f"(lambda input: {res})({k})"), v)
+
+    def test_solver(self):
+        test_solver = syntax.parse(r"""
+        PROGRAM ::= 0x NUMBER
+        NUMBER ::= DIGIT | DIGIT NUMBER
+        DIGIT ::= 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | a | b | c | d | e | f
+        """)
+
+        examples = [(None, 780)]
+        res = do_synthesis(test_solver, examples)
+        # guess the number of which I am thinking - in hex
+        # this basically uses the synthesizer as a solver
+        self.assertIsNotNone(res)
+        print(res)
+        for k, v in examples:
+            self.assertEqual(eval(f"(lambda input: {res})({k})"), v)
+
+    def test_multiplication(self):
+        test_multiplication = syntax.parse(r"""
+        PROGRAM ::= (z(lambda\s rec:\s lambda\s x:\s 0\s if\s x[0] \s==\s 0 \selse\s REC))(input)
+        VAR ::= x[1] | x[0]
+        REC ::= VAR | rec((VAR \s-\s 1,\s VAR)) | REC \s+\s REC
+        """)
+
+        examples = [((5, 4), 20), ((3, 2), 6)]
+        res = do_synthesis(test_multiplication, examples)
+        # synthesize (z(lambda rec: lambda x: 0 if x[0] == 0 else rec((x[0] - 1, x[1])) + x[1]))(input)
+        self.assertIsNotNone(res)
+        print(res)
+        for k, v in examples:
+            self.assertEqual(eval(f"(lambda input: {res})({k})"), v)
 
 if __name__ == '__main__':
     unittest.main()

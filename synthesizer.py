@@ -1,5 +1,3 @@
-# SWEET: Synthesis With observational Equivalence (Elad & Tomer)
-# SMART: Synthesis that is Multi-threaded, Abstractized, Recursive and Transparent
 # SLACC: Synthesizer Lacking A Cool Acronym
 
 # Features:
@@ -18,15 +16,14 @@
 # OE benchmarking
 # Term rewriting systems
 
-# TODO short term:
+# TODO "short" term, probably perpetually:
 # Join together observational equivalence checker and specification check
 # Change OE to hashtable
 # Perform grow only on last layer
 # Tail-recursion optimization (extend the short-circuit)
-# Update README for TRS (inc. syntax) and depth limit
 
 # TODO idealistically:
-# Imperative synthesis! Details discussed with Orel and Shachar and Matan, see article by Hila
+# Imperative synthesis!
 
 import profile
 from typing import List
@@ -118,7 +115,7 @@ def check_if_function(prog_to_test):
     return False
 
 
-def check_if_seen_constant(prog_to_test, seen_progs, nonterminals):
+def check_if_seen_constant(prog_to_test, seen_progs):
     if "input" not in prog_to_test:  # heuristic. constants in general are undecidable
         debug(f"DEBUG: {prog_to_test} does not contain input. Checking if it is a constant...")
         try:
@@ -158,7 +155,7 @@ def check_if_seen_constant(prog_to_test, seen_progs, nonterminals):
     return ConstantResult.UNDECIDABLE_NOT_A_CONSTANT
 
 
-def equiv_to_any(seen_progs, prog_to_test, nonterminals, examples):
+def equiv_to_any(seen_progs, prog_to_test, examples):
     debug(f"DEBUG: checking for equivalence with {prog_to_test}...")
     if check_if_function(prog_to_test):
         return False  # function equivalence is undecidable
@@ -167,7 +164,7 @@ def equiv_to_any(seen_progs, prog_to_test, nonterminals, examples):
         debug(f"DEBUG: {prog_to_test} is in seen_progs")
         return True
 
-    res = check_if_seen_constant(prog_to_test, seen_progs, nonterminals)
+    res = check_if_seen_constant(prog_to_test, seen_progs)
     if res == ConstantResult.SEEN_CONSTANT or res == ConstantResult.SEEN_NOT_A_CONSTANT:
         return True
     if res == ConstantResult.NOT_SEEN_CONSTANT or res == ConstantResult.NOT_SEEN_NOT_A_CONSTANT or \
@@ -228,7 +225,7 @@ def clean_instances(instances, nonterminals, examples):
     ret_joined = {it: set_used() for it in nonterminals}
     for k in nonterminals:
         for v in instances[k]:
-            if not equiv_to_any(ret_joined[k], ''.join(v), nonterminals, examples):
+            if not equiv_to_any(ret_joined[k], ''.join(v), examples):
                 ret[k].add(v)
                 ret_joined[k].add(''.join(v))
     return ret, ret_joined
@@ -245,7 +242,7 @@ def get_values(rule, instances, nonterminals):
             for option in options:
                 newret.extend([item + option for item in ret])
             ret = newret
-    return set_used(ret)
+    return set_used(ret) - instances[rule.lhs]
 
 
 def short_circuit(new_values, nonterminals, rules):
@@ -300,7 +297,7 @@ def expand(rules: List[CfgRule], initial, nonterminals, examples, trs, depth_lim
         if current_height == config.depth_for_observational_equivalence:
             instances, instances_joined = clean_instances(instances, nonterminals, examples)
 
-        new_values = {it: set_used() for it in nonterminals}
+        new_values = {it: set_used() for it in nonterminals}  # todo investigate turning these into lists
         new_values_joined = {it: set_used() for it in nonterminals}
         for rule in rules:
             rule_values = get_values(rule, instances, nonterminals)
@@ -322,12 +319,14 @@ def expand(rules: List[CfgRule], initial, nonterminals, examples, trs, depth_lim
             for value in rule_values:
                 joined = ''.join(value)
                 found_equiv = (not skipped) and equiv_to_any(instances_joined[rule.lhs] | new_values_joined[rule.lhs],
-                                                            joined, nonterminals, examples)
+                                                             joined, examples)
                 if not found_equiv:
                     new_values_for_lhs.append(value)
                     new_values_for_lhs_joined.append(joined)
                     if rule.lhs == initial:
                         prog_result_cache[joined] = [eval_cached(joined, k) for k, _ in examples]
+                        if trs:
+                            joined = apply_trs(joined, trs)
                         yield joined
 
             new_values[rule.lhs] |= set_used(new_values_for_lhs)
@@ -340,6 +339,8 @@ def expand(rules: List[CfgRule], initial, nonterminals, examples, trs, depth_lim
         short_circuited_joined = {it: map(lambda x: ''.join(x), short_circuited[it]) for it in nonterminals}
         for value in short_circuited_joined[initial]:
             prog_result_cache[value] = [eval_cached(value, k) for k, _ in examples]
+            if trs:
+                value = apply_trs(value, trs)
             yield value
 
         for k in nonterminals:

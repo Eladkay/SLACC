@@ -33,3 +33,26 @@ def foldr(acc, x, list):
     if not list:
         return x
     return acc(car(list), foldr(acc, x, cdr(list)))
+
+
+class linked_list:
+    def __init__(self, value, next=None):
+        self.value = value
+        self.next = next
+
+    def __repr__(self):
+        return f"linked_list({self.value}, {self.next})"
+
+    def __eq__(self, other):
+        return repr(self) == repr(other)
+
+    def __hash__(self):
+        return hash(self.value) ^ hash(self.next)
+
+
+def concat(list1: linked_list, list2: linked_list):
+    if not list1:
+        return list2
+    if not list2:
+        return list1
+    return linked_list(list1.value, concat(list1.next, list2))
