@@ -16,15 +16,6 @@
 # OE benchmarking
 # Term rewriting systems
 
-# TODO "short" term, probably perpetually:
-# Join together observational equivalence checker and specification check
-# Change OE to hashtable
-# Perform grow only on last layer
-# Tail-recursion optimization (extend the short-circuit)
-
-# TODO idealistically:
-# Imperative synthesis!
-
 import profile
 from typing import List
 from z3 import Solver, Int, ForAll, sat, Z3Exception, Exists
@@ -253,15 +244,14 @@ def short_circuit(new_values, nonterminals, rules):
         for rule in rules:
             nonterminals = [x for x in rule.rhs if x in nonterminals]
             if len(nonterminals) != 1 \
-                    or rule.rhs[0] not in nonterminals:  # todo
+                    or rule.rhs[0] not in nonterminals:
                 continue
             nonterminal = nonterminals[0]
             if not new_values[nonterminal]:
                 continue
             old_len = len(extra[rule.lhs])
-            # extra[rule.lhs].update({tuple(value if it == nonterminal else it for it in rule.rhs)
-            #                         for value in new_values[nonterminal]})
-            extra[rule.lhs].update(new_values[rule.rhs[0]])  # todo
+
+            extra[rule.lhs].update(new_values[rule.rhs[0]])
             if old_len != len(extra[rule.lhs]):
                 changed = True
                 debug(f"DEBUG: {len(extra[rule.lhs]) - old_len} elements short-circuited using rule {rule}")
@@ -297,7 +287,7 @@ def expand(rules: List[CfgRule], initial, nonterminals, examples, trs, depth_lim
         if current_height == config.depth_for_observational_equivalence:
             instances, instances_joined = clean_instances(instances, nonterminals, examples)
 
-        new_values = {it: set_used() for it in nonterminals}  # todo investigate turning these into lists
+        new_values = {it: set_used() for it in nonterminals}
         new_values_joined = {it: set_used() for it in nonterminals}
         for rule in rules:
             rule_values = get_values(rule, instances, nonterminals)
